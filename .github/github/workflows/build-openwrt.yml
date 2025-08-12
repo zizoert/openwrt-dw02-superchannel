@@ -1,0 +1,61 @@
+name: Build OpenWrt DW02-412H SuperChannel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential ccache ecj fastjar file g++ gawk \
+          gettext git java-propose-classpath libelf-dev libncurses5-dev libncursesw5-dev \
+          libssl-dev python3 python3-distutils python3-setuptools python3-pyelftools \
+          qemu-utils rsync subversion swig time unzip wget zlib1g-dev
+
+      - name: Clone OpenWrt
+        run: |
+          git clone https://github.com/openwrt/openwrt.git
+          cd openwrt
+          git checkout v23.05.3
+
+      - name: Update feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Prepare config for DW02-412H 128M
+        run: |
+          cd openwrt
+          rm -f .config
+          echo "CONFIG_TARGET_ath79=y" >> .config
+          echo "CONFIG_TARGET_ath79_nand=y" >> .config
+          echo "CONFIG_TARGET_ath79_nand_DEVICE_dongwon_dw02-412h-128m=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-ath10k=y" >> .config
+          echo "CONFIG_PACKAGE_luci=y" >> .config
+          echo "CONFIG_PACKAGE_wpad-mesh-wolfssl=y" >> .config
+          make defconfig
+
+      - name: Copy wireless config
+        run: |
+          cd openwrt
+          mkdir -p files/etc/config
+          cp ../files/etc/config/wireless files/etc/config/wireless
+
+      - name: Build OpenWrt
+        run: |
+          cd openwrt
+          make -j$(nproc) || make -j1 V=s
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v3
+        with:
+          name: openwrt-dw02h-superchannel
+          path: openwrt/bin/targets
